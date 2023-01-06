@@ -1,0 +1,4 @@
+﻿  Source.cpp
+C:\Users\aznbo\Desktop\GFX stuff\Test Game\src\Source.cpp(190,22): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\aznbo\Desktop\GFX stuff\Test Game\src\Source.cpp(200,72): warning C4244: 'argument': conversion from 'int' to 'GLfloat', possible loss of data
+  Test Game.vcxproj -> C:\Users\aznbo\Desktop\GFX stuff\Test Game\x64\Debug\Test Game.exe

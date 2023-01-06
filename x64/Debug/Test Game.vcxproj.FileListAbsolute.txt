@@ -1,0 +1,2 @@
+C:\Users\aznbo\Desktop\GFX stuff\Test Game\x64\Debug\Shadertoy Port.exe
+C:\Users\aznbo\Desktop\GFX stuff\Shadertoy Port\x64\Debug\Shadertoy Port.exe
