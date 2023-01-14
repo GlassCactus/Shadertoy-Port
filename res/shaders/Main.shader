@@ -23,7 +23,7 @@ uniform float iTime;
 
 vec2 fragCoord = gl_FragCoord.xy;
 vec3 camera = vec3(0.0, 0.0, 4.0);
-vec3 col = vec3(1.0);
+vec3 col = vec3(0.0);
 
 #define MAX_RAYMARCH_STEPS 250
 #define PI 3.1415926535
@@ -130,12 +130,13 @@ Surface minObjectDistance(Surface obj1, Surface obj2)
 Surface map(vec3 p)
 {
     Surface d;
-    Surface box = SDFbox(p, vec3(0.75), vec3(0.0, 0.5, -1.0), vec3(0.0), Cyan());
-    Surface box2 = SDFbox(p, vec3(0.35), vec3(-2.5 * sin(iTime * 0.5), 1.0, -2.5 * cos(iTime * 0.5)), vec3(0.0), Brass());
-    Surface scene = minObjectDistance(box, box2);
+    Surface sphere = SDFsphere(p, 1.0, vec3(-2.5, 0.0, -7.0), vec3(0.0), Cyan());
+    Surface sphere2 = SDFsphere(p, 1.5, vec3(0.0, 0.5, -5.0), vec3(0.0), Brass());
+    Surface box = SDFbox(p, vec3(0.5), vec3(2.5, 2.0, -4.0), vec3(0.0), Cyan());
+    Surface balls = minObjectDistance(sphere, sphere2);
+    Surface scene = minObjectDistance(balls, box);
     return minObjectDistance(scene, SDFplane(p, vec3(0.0), Checkerboard(p)));
 }
-
 //----------Normals----------//
 vec3 calcNormal(vec3 p)
 {
@@ -222,45 +223,63 @@ vec3 BlinnPhong(vec3 normal, vec3 lightPos, vec3 fragPos, Material mat)
     return (ambient + diffuse + specular);
 }
 
+//----------Anti-Aliasing----------//
+// Takes four evenly spaced rotated supersamples in each pixel
+vec2 RGSS(int num)
+{
+    if (num == 0) return vec2(0.125, 0.375);
+    if (num == 1) return vec2(-0.125, -0.375);
+    if (num == 2) return vec2(0.375, -0.125);
+    else return vec2(-0.375, 0.125);
+}
+
 void main()
 {
-    vec2 uv = (fragCoord - 0.5 * iResolution.xy) / iResolution.y; //aspect ratio       
-    vec3 rd = normalize(vec3(uv, -1.0)); //Turns the uv into a 3D vector by making it point outwards
-    vec3 background = vec3(0.65, 0.85, 1.0) + uv.y * 0.75;
-    //background = vec3(0.0);
-
-    Surface d = rayMarch(camera, rd);
-    Material shine = d.mat;
-    float attenuation = 1.0 / (attConst + attLinear * d.sd + attQuad * d.sd * d.sd); //inverse square law
-    vec3 fragPos = camera + rd * d.sd;
-    vec3 normal = vec3(calcNormal(fragPos));
-    vec3 reflectDir = reflect(rd, normal);
-    vec3 lightPos = vec3(10.0 * cos(iTime), 10.0, 10.0);
-
-    if (d.sd <= farPlane)
+    vec3 background;
+    Surface d;
+    int i;
+    for (i = 0; i < 4; i++)
     {
-        //Fresnel - Makes the surface more reflective the more the frag is angled away from the camera
-        float fresnel = clamp(pow(1.0 - dot(normal, -rd), 5.0), 0.1, 0.5);
+        vec2 uv = ((fragCoord + RGSS(i)) - 0.5 * iResolution.xy) / iResolution.y; //aspect ratio       
+        vec3 rd = normalize(vec3(uv, -1.0)); //Turns the uv into a 3D vector by making it point outwards
+        background = vec3(0.65, 0.85, 1.0) + uv.y * 0.75;
+        background = mix(vec3(1.0, 0.75, 0.5), vec3(0.65, 0.85, 1.0), uv.y + 0.55);
+        //background = vec3(0.0);
 
-        //Reflections - Adds the reflections to the colors before running through the BRDF
-        for (int i = 0; i < 1; i++)
+        d = rayMarch(camera, rd);
+        Material shine = d.mat;
+        float attenuation = 1.0 / (attConst + attLinear * d.sd + attQuad * d.sd * d.sd); //inverse square law
+        vec3 fragPos = camera + rd * d.sd;
+        vec3 normal = vec3(calcNormal(fragPos));
+        vec3 reflectDir = reflect(rd, normal);
+        vec3 lightPos = vec3(10.0 * cos(iTime * 0.5), 10.0, 10.0 * sin(iTime * 0.5) - 5.0);
+
+        if (d.sd <= farPlane)
         {
-            Surface bounce = rayMarch(fragPos + normal * 0.003, reflectDir);
-            if (bounce.sd <= farPlane)
-                shine = Material(shine.ambientCol + bounce.mat.ambientCol * fresnel, shine.diffCol + bounce.mat.diffCol * fresnel, shine.specCol + bounce.mat.specCol * fresnel, shine.alpha);
+            //Fresnel - Makes the surface more reflective the more the frag is angled away from the camera
+            float fresnel = clamp(pow(1.0 - dot(normal, -rd), 5.0), 0.1, 0.5);
 
-            else
-                shine = Material(shine.ambientCol + background * fresnel, shine.diffCol + background * fresnel, shine.specCol + background * fresnel, shine.alpha);
-            reflectDir = reflect(reflectDir, normal);
+            //Reflections - Adds the reflections to the colors before running through the BRDF
+            for (int i = 0; i < 1; i++)
+            {
+                Surface bounce = rayMarch(fragPos + normal * 0.003, reflectDir);
+                if (bounce.sd <= farPlane)
+                    shine = Material(shine.ambientCol + bounce.mat.ambientCol * fresnel, shine.diffCol + bounce.mat.diffCol * fresnel, shine.specCol + bounce.mat.specCol * fresnel, shine.alpha);
+
+                else
+                    shine = Material(shine.ambientCol + background * fresnel, shine.diffCol + background * fresnel, shine.specCol + background * fresnel, shine.alpha);
+                reflectDir = reflect(reflectDir, normal);
+            }
+
+            //Blinn-Phong + softshadows
+            vec3 b_phong = BlinnPhong(normal, lightPos, fragPos, shine);
+            float softShadow = softShadow(fragPos + normal * 0.003, lightPos);
+            col += b_phong * softShadow * attenuation;
         }
-
-        //Blinn-Phong + softshadows
-        vec3 b_phong = BlinnPhong(normal, lightPos, fragPos, shine);
-        float softShadow = softShadow(fragPos + normal * 0.001, lightPos);
-        col = b_phong * softShadow * attenuation;
+        else col += background; //Rays go into the v o i d ~
     }
 
-    else col = background; //Rays go into the v o i d ~
+    col /= float(i);
     col = mix(col, background, 1.0 - exp(-0.0001 * d.sd * d.sd * d.sd)); //fog
     FragColor.rgb = pow(col.rgb, vec3(1.0 / GAMMA));
 } 
