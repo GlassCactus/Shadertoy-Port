@@ -22,7 +22,7 @@ uniform vec2 iResolution;
 uniform float iTime;
 
 vec2 fragCoord = gl_FragCoord.xy;
-vec3 camera = vec3(0.0, 0.0, 3.0);
+vec3 camera = vec3(0.0, 0.0, 4.0);
 vec3 col = vec3(1.0);
 
 #define MAX_RAYMARCH_STEPS 250
@@ -99,21 +99,24 @@ Surface SDFsphere(vec3 p, float radius, vec3 move, vec3 color, Material mat)
 
 Surface SDFbox(vec3 p, vec3 rect, vec3 move, vec3 color, Material mat)
 {
-    mat3 rotZ = mat3(cos(iTime), -sin(iTime), 0.0,
-        sin(iTime), cos(iTime), 0.0,
-        0.0, 0.0, 1.0);
+    float c = cos(iTime * 0.5);
+    float s = sin(iTime * 0.5);
 
-    mat3 rotY = mat3(cos(iTime), 0.0, sin(iTime),
-        0.0, 1.0, 0.0,
-        -sin(iTime), 0.0, cos(iTime));
+    mat3 rotZ = mat3(c, -s, 0.0,
+                     s, c, 0.0,
+                     0.0, 0.0, 1.0);
+
+    mat3 rotY = mat3(c, 0.0, s,
+                     0.0, 1.0, 0.0,
+                    -s, 0.0, c);
 
     mat3 rotX = mat3(1.0, 0.0, 0.0,
-        0.0, cos(iTime), -sin(iTime),
-        0.0, sin(iTime), cos(iTime));
+                     0.0, c, -s,
+                     0.0, s, c);
 
     p = p - move;
-    p *= (rotX * rotY * rotX);
-    float d = length(max(abs(p) - rect, 0.0)) - 0.1;
+    p *= rotY * rotZ;
+    float d = length(max(abs(p) - rect, 0.0)) - 0.02;
     return Surface(d, color, mat);
 }
 
@@ -127,14 +130,11 @@ Surface minObjectDistance(Surface obj1, Surface obj2)
 Surface map(vec3 p)
 {
     Surface d;
-    Surface sphere = SDFsphere(p, 1.0, vec3(-2.5, 0.0, -7.0), vec3(0.0), Cyan());
-    Surface sphere2 = SDFsphere(p, 1.5, vec3(0.0, 0.5, -5.0), vec3(0.0), Brass());
-    Surface box = SDFbox(p, vec3(0.5), vec3(2.5, 2.0, -4.0), vec3(0.0), Cyan());
-    Surface balls = minObjectDistance(sphere, sphere2);
-    Surface scene = minObjectDistance(balls, box);
+    Surface box = SDFbox(p, vec3(0.75), vec3(0.0, 0.5, -1.0), vec3(0.0), Cyan());
+    Surface box2 = SDFbox(p, vec3(0.35), vec3(-2.5 * sin(iTime * 0.5), 1.0, -2.5 * cos(iTime * 0.5)), vec3(0.0), Brass());
+    Surface scene = minObjectDistance(box, box2);
     return minObjectDistance(scene, SDFplane(p, vec3(0.0), Checkerboard(p)));
 }
-
 
 //----------Normals----------//
 vec3 calcNormal(vec3 p)
@@ -176,7 +176,7 @@ float softShadow(vec3 fragPos, vec3 lightPos)
         res = min(res, (d * 3.0) / depth);
         depth += d;
 
-        if (d < nearPlane || depth > 10.0) //the lower limit of "d" needs to be lower than the one in the rayMarch function to avoid having a streak of light on overlapping shadows.
+        if (d < nearPlane || depth > farPlane) //the lower limit of "d" needs to be lower than the one in the rayMarch function to avoid having a streak of light on overlapping shadows.
             break;
     }
     return clamp(res, 0.02, 1.0); //clamps the res value between nonzero numbers so it doesn't black out everything
@@ -226,29 +226,38 @@ void main()
 {
     vec2 uv = (fragCoord - 0.5 * iResolution.xy) / iResolution.y; //aspect ratio       
     vec3 rd = normalize(vec3(uv, -1.0)); //Turns the uv into a 3D vector by making it point outwards
-    //vec3 background = vec3(0.65, 0.85, 1.0) + uv.y * 0.75;
-    vec3 background = vec3(0.0);
+    vec3 background = vec3(0.65, 0.85, 1.0) + uv.y * 0.75;
+    //background = vec3(0.0);
 
     Surface d = rayMarch(camera, rd);
+    Material shine = d.mat;
     float attenuation = 1.0 / (attConst + attLinear * d.sd + attQuad * d.sd * d.sd); //inverse square law
     vec3 fragPos = camera + rd * d.sd;
     vec3 normal = vec3(calcNormal(fragPos));
-    vec3 lightPos = vec3(10.0 * cos(iTime * 0.5), 10.0, 10.0 * sin(iTime * 0.5) - 5.0);
+    vec3 reflectDir = reflect(rd, normal);
+    vec3 lightPos = vec3(10.0 * cos(iTime), 10.0, 10.0);
 
     if (d.sd <= farPlane)
     {
+        //Fresnel - Makes the surface more reflective the more the frag is angled away from the camera
+        float fresnel = clamp(pow(1.0 - dot(normal, -rd), 5.0), 0.1, 0.5);
+
+        //Reflections - Adds the reflections to the colors before running through the BRDF
+        for (int i = 0; i < 1; i++)
+        {
+            Surface bounce = rayMarch(fragPos + normal * 0.003, reflectDir);
+            if (bounce.sd <= farPlane)
+                shine = Material(shine.ambientCol + bounce.mat.ambientCol * fresnel, shine.diffCol + bounce.mat.diffCol * fresnel, shine.specCol + bounce.mat.specCol * fresnel, shine.alpha);
+
+            else
+                shine = Material(shine.ambientCol + background * fresnel, shine.diffCol + background * fresnel, shine.specCol + background * fresnel, shine.alpha);
+            reflectDir = reflect(reflectDir, normal);
+        }
+
         //Blinn-Phong + softshadows
-        vec3 b_phong = BlinnPhong(normal, lightPos, fragPos, d.mat);
+        vec3 b_phong = BlinnPhong(normal, lightPos, fragPos, shine);
         float softShadow = softShadow(fragPos + normal * 0.001, lightPos);
-
-        //Reflection stuff
-        vec3 reflectDir = normalize(reflect(rd, normal));
-        vec3 reflectCol = background;
-        Surface reflectD = rayMarch(fragPos + normal * 0.001, reflectDir);
-        vec3 reflectBP = BlinnPhong(normal, lightPos, camera + reflectDir, reflectD.mat);
-
-        if (reflectD.sd <= farPlane) reflectCol = reflectD.mat.diffCol;
-        col = ((b_phong * softShadow) + reflectCol * 0.15) * attenuation;
+        col = b_phong * softShadow * attenuation;
     }
 
     else col = background; //Rays go into the v o i d ~
