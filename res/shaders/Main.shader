@@ -30,6 +30,8 @@ vec3 col = vec3(0.0);
 #define GAMMA 2.2
 #define nearPlane 0.00001
 #define farPlane 100.0
+#define aaON = 4;
+#define aaOFF = 1;
 
 const float attConst = 1.0;
 const float attLinear = 0.0035f;
@@ -41,6 +43,11 @@ struct Material
     vec3 diffCol;
     vec3 specCol;
     float alpha;
+    float gloss;
+    // The gloss number is based on how far it is from the number 1. ex) 0.2 = 1.8, 0.5 = 1.5, 0.0 = 2.0
+    float ior;
+    // IF 0 < ior < 1 THEN equivalent to 1/ior
+    // IF 1 < ior THEN just use the ior
 };
 
 struct Surface
@@ -51,22 +58,38 @@ struct Surface
 };
 
 //----------Materials----------//
-Material Brass()
+//----------Materials----------//
+Material Gold()
 {
     vec3 a = vec3(0.07690, 0.037028, 0.0);
     vec3 d = vec3(0.57955, 0.288815, 0.00837);
-    vec3 s = vec3(0.98283, 0.875137, 0.62535);
+    vec3 s = vec3(1.0);
     float alpha = 38.0;
-    return Material(a, d, s, alpha);
+    float gloss = 1.0;
+    float ior = 2.0;
+    return Material(a, d, s, alpha, gloss, ior);
 }
 
-Material Cyan()
+Material Obsidian()
 {
-    vec3 a = vec3(0.00155, 0.00137, 0.00255);
-    vec3 d = vec3(0.02377, 0.12027, 0.13769);
-    vec3 s = vec3(0.088845, 0.55, 0.55);
-    float alpha = 55.0;
-    return Material(a, d, s, alpha);
+    vec3 a = vec3(0.0);
+    vec3 d = vec3(0.0);
+    vec3 s = vec3(1.0);
+    float alpha = 135.0;
+    float gloss = 1.0;
+    float ior = 1.5;
+    return Material(a, d, s, alpha, gloss, ior);
+}
+
+Material Copper()
+{
+    vec3 a = vec3(0.0);
+    vec3 d = vec3(0.87111, 0.38391, 0.28864);
+    vec3 s = vec3(1.0);
+    float alpha = 85.0;
+    float gloss = 1.5;
+    float ior = 1.22;
+    return Material(a, d, s, alpha, gloss, ior);
 }
 
 Material Checkerboard(vec3 p)
@@ -75,7 +98,9 @@ Material Checkerboard(vec3 p)
     vec3 d = vec3(a * 0.2);
     vec3 s = vec3(0.2);
     float alpha = 100.0;
-    return Material(a, d, s, alpha);
+    float gloss = 1.0;
+    float ior = 1.0;
+    return Material(a, d, s, alpha, gloss, ior);
 }
 
 //----------Signed Distance Fields----------//
@@ -115,7 +140,7 @@ Surface SDFbox(vec3 p, vec3 rect, vec3 move, vec3 color, Material mat)
                      0.0, s, c);
 
     p = p - move;
-    p *= rotY * rotZ;
+    p *= rotX * rotY * rotZ;
     float d = length(max(abs(p) - rect, 0.0)) - 0.02;
     return Surface(d, color, mat);
 }
@@ -129,13 +154,29 @@ Surface minObjectDistance(Surface obj1, Surface obj2)
 
 Surface map(vec3 p)
 {
+    Material Colorb;
     Surface d;
-    Surface sphere = SDFsphere(p, 1.0, vec3(-2.5, 0.0, -7.0), vec3(0.0), Cyan());
-    Surface sphere2 = SDFsphere(p, 1.5, vec3(0.0, 0.5, -5.0), vec3(0.0), Brass());
-    Surface box = SDFbox(p, vec3(0.5), vec3(2.5, 2.0, -4.0), vec3(0.0), Cyan());
-    Surface balls = minObjectDistance(sphere, sphere2);
-    Surface scene = minObjectDistance(balls, box);
-    return minObjectDistance(scene, SDFplane(p, vec3(0.0), Checkerboard(p)));
+    Surface sphere = SDFsphere(p, 1.5, vec3(0.0, 0.5, -5.0), vec3(0.0), Obsidian());
+    Surface box = SDFbox(p, vec3(0.5), vec3(2.5, 2.0, -4.0), vec3(0.0), Obsidian());
+    Surface balls = minObjectDistance(sphere, box);
+
+    for (int i = 0; i < 1; i++)
+    {
+        if (i % 3 == 0) Colorb = Copper();
+        if (i % 3 == 1) Colorb = Gold();
+        if (i % 3 == 2) Colorb = Obsidian();
+        balls = minObjectDistance(balls, SDFsphere(p, 1.5, vec3(2.5 + 2.5 * float(i), 0.5, -7.0 - 2.5 * float(i)), vec3(0.0), Colorb));
+    }
+
+    for (int i = 0; i < 1; i++)
+    {
+        if (i % 3 == 0) Colorb = Gold();
+        if (i % 3 == 1) Colorb = Copper();
+        if (i % 3 == 2) Colorb = Obsidian();
+        balls = minObjectDistance(balls, SDFsphere(p, 1.5, vec3(-2.5 - 2.5 * float(i), 0.5, -7.0 - 2.5 * float(i)), vec3(0.0), Colorb));
+    }
+
+    return minObjectDistance(balls, SDFplane(p, vec3(0.0), Checkerboard(p)));
 }
 //----------Normals----------//
 vec3 calcNormal(vec3 p)
@@ -203,7 +244,7 @@ vec3 BlinnPhong(vec3 normal, vec3 lightPos, vec3 fragPos, Material mat)
 {
     //ambient
     float occ = AmbientOcclusion(fragPos, normal);
-    vec3 ambient = mat.ambientCol * occ;
+    vec3 ambient = mat.ambientCol;
     //return vec3(0.9) * occ; //Occlusion test
 
     //diffuse
@@ -217,10 +258,30 @@ vec3 BlinnPhong(vec3 normal, vec3 lightPos, vec3 fragPos, Material mat)
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = max(dot(normal, halfwayDir), 0.0);
     spec = pow(spec, mat.alpha) * ((mat.alpha + 2.0) / (4.0 * PI * (2.0 - exp(-mat.alpha / 2.0))));
-    vec3 specular = (spec * occ) * mat.specCol;
+    vec3 specular = spec * mat.specCol;
 
     //phong
-    return (ambient + diffuse + specular);
+    return (ambient * occ + diffuse + specular * occ);
+}
+
+vec3 reflectBP(vec3 normal, vec3 lightPos, vec3 fragPos, Material mat, vec3 reflectDir)
+{
+    //ambient
+    vec3 ambient = mat.ambientCol;
+
+    //diffuse
+    vec3 lightDir = normalize(lightPos - fragPos);
+    float diff = max(dot(normal, lightDir), 0.0);
+    vec3 diffuse = diff * mat.diffCol;
+
+    //specular with normalization
+    vec3 viewDir = normalize(camera - fragPos);
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = max(dot(reflectDir, halfwayDir), 0.0);
+    spec = pow(spec, mat.alpha) * ((mat.alpha + 2.0) / (4.0 * PI * (2.0 - exp(-mat.alpha / 2.0))));
+    vec3 specular = spec * mat.specCol;
+
+    return ambient + diffuse + specular;
 }
 
 //----------Anti-Aliasing----------//
@@ -233,12 +294,23 @@ vec2 RGSS(int num)
     else return vec2(-0.375, 0.125);
 }
 
+float dielectricFresnel(vec3 normal, vec3 rd, Material object)
+{
+    float NdotV = dot(normal, -rd);
+    float fresnel = clamp(pow(1.0 - NdotV, 5.0), 0.005, 1.0);
+    float k = pow(1.0 - object.ior, 2.0) / pow(1.0 + object.ior, 2.0);
+    fresnel += (1.0 - fresnel) * k;
+    fresnel = fresnel + (1.0 - fresnel) * pow(NdotV, 5.0) * pow(1.0 - object.gloss, 2.0);
+    return fresnel;
+}
+
 void main()
 {
     vec3 background;
     Surface d;
     int i;
-    for (i = 0; i < 4; i++)
+
+    for (i = 0; i < 1; i++)
     {
         vec2 uv = ((fragCoord + RGSS(i)) - 0.5 * iResolution.xy) / iResolution.y; //aspect ratio       
         vec3 rd = normalize(vec3(uv, -1.0)); //Turns the uv into a 3D vector by making it point outwards
@@ -256,25 +328,25 @@ void main()
 
         if (d.sd <= farPlane)
         {
-            //Fresnel - Makes the surface more reflective the more the frag is angled away from the camera
-            float fresnel = clamp(pow(1.0 - dot(normal, -rd), 5.0), 0.1, 0.5);
-
+            float fresnel = dielectricFresnel(normal, rd, d.mat);
+            vec3 ref = fragPos + normal * 0.005;   
+            
             //Reflections - Adds the reflections to the colors before running through the BRDF
             for (int i = 0; i < 1; i++)
             {
-                Surface bounce = rayMarch(fragPos + normal * 0.003, reflectDir);
+                Surface bounce = rayMarch(ref, reflectDir);
                 if (bounce.sd <= farPlane)
-                    shine = Material(shine.ambientCol + bounce.mat.ambientCol * fresnel, shine.diffCol + bounce.mat.diffCol * fresnel, shine.specCol + bounce.mat.specCol * fresnel, shine.alpha);
+                    shine = Material(shine.ambientCol + bounce.mat.ambientCol * fresnel, shine.diffCol + bounce.mat.diffCol * fresnel, shine.specCol + bounce.mat.specCol * fresnel, shine.alpha, shine.gloss, shine.ior);
 
                 else
-                    shine = Material(shine.ambientCol + background * fresnel, shine.diffCol + background * fresnel, shine.specCol + background * fresnel, shine.alpha);
-                reflectDir = reflect(reflectDir, normal);
+                    shine = Material(shine.ambientCol + background * fresnel, shine.diffCol + background * fresnel, shine.specCol + background * fresnel, shine.alpha, shine.gloss, shine.ior);                   
+            
             }
-
+            
             //Blinn-Phong + softshadows
             vec3 b_phong = BlinnPhong(normal, lightPos, fragPos, shine);
             float softShadow = softShadow(fragPos + normal * 0.003, lightPos);
-            col += b_phong * softShadow * attenuation;
+            col += b_phong * softShadow * attenuation ;            
         }
         else col += background; //Rays go into the v o i d ~
     }
