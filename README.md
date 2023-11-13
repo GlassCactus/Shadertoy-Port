@@ -1,11 +1,27 @@
 # Shadertoy-Port
-A renderer made from scratch in C++ using OpenGL that was created to run my ShaderToy fragment shaders. This was created to bridge the gap between learning OpenGL and learning raw GLSL with different rendering and lighting methods. This is mostly to be able to show my projects in ShaderToy until I figure out a way to do apply path tracing and ray marching to my rasterizer. Until then, this will be mainly used to display the rendering and lighting techniques I have learned.
+A renderer made from scratch in C++ using OpenGL that was created to run and display my ShaderToy projects. The focus of this project is to showcase my skills and knowledge in GLSL and to bridge the gap between learning OpenGL and learning the shader language. 
 
-![image](https://user-images.githubusercontent.com/86325057/212493657-8b567b9f-2997-4610-8ff6-581f32152954.png)
-It currently features Ray Marching, Blinn-Phong lighting, Specular Normalization, Ambient Occlusion, Anti-aliasing "RGSS", Soft Shadows, Fresnel shading, and Reflections.
+# Features
+- Ray Marching
+- Ambient Occlusion
+- Reflections
+- Blinn-Phong Lighting
+- Specular Normalization
+- Anti-Aliasing "RGSS"
+- Soft Shadows
+- Fresnel Shading
+- Noise
+- IOR (Index of Refraction)
 
-![Balls Ambient Occlusion](https://github.com/GlassCactus/Shadertoy-Port/assets/86325057/ca11ee75-bcc3-4245-903d-d30e73fb1792)
-Figure 1: A raymarching implementation of Ambient Occlusion
+# Display
+![Scene](https://github.com/GlassCactus/Shadertoy-Port/assets/86325057/61549d0b-fbeb-4044-b218-9713be4688dc)
+**Different materials with different gloss and IoR values.**
 
-![Anti-Aliasing Comparison](https://github.com/GlassCactus/Shadertoy-Port/assets/86325057/b99c289d-5ce9-42fb-a303-29f039aca698)
-Figure 2: Comparison between the same scene with Anti-Aliasing turned OFF (top image) and turned ON (bottom image)
+![4 panel](https://github.com/GlassCactus/Shadertoy-Port/assets/86325057/92e766a7-6167-42d1-9121-2f3d7b103b1e)
+
+![Ambient Occlussion](https://github.com/GlassCactus/Shadertoy-Port/assets/86325057/bdfcb015-9e49-4df1-afde-7814f3f4f585)
+
+# Goals
+- Better way to implement the IoR and Gloss values
+- Cook-Torrance Lighting
+- Water Shader
