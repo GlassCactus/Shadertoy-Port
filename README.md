@@ -23,8 +23,8 @@ Different materials with different gloss and IoR values
 ![Ambient Occlussion](https://github.com/GlassCactus/Shadertoy-Port/assets/86325057/bdfcb015-9e49-4df1-afde-7814f3f4f585)
 
 # Goals
-[ ] Better way to implement the IoR and Gloss values
-[ ] Improve reflections so they can bounce multiple times properly
-[ ] Cook-Torrance Lighting
-[ ] Ray Tracing
-[ ] Water Shader
+- [ ] Better way to implement the IoR and Gloss values
+- [ ] Improve reflections so they can bounce multiple times properly
+- [ ] Cook-Torrance Lighting
+- [ ] Ray Tracing
+- [ ] Water Shader
