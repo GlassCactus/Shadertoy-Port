@@ -53,23 +53,10 @@ struct Material
 struct Surface
 {
     float sd;
-    vec3 color;
     Material mat;
 };
 
 //----------Materials----------//
-//----------Materials----------//
-Material Gold()
-{
-    vec3 a = vec3(0.07690, 0.037028, 0.0);
-    vec3 d = vec3(0.57955, 0.288815, 0.00837);
-    vec3 s = vec3(1.0);
-    float alpha = 38.0;
-    float gloss = 1.0;
-    float ior = 2.0;
-    return Material(a, d, s, alpha, gloss, ior);
-}
-
 Material Obsidian()
 {
     vec3 a = vec3(0.0);
@@ -81,12 +68,23 @@ Material Obsidian()
     return Material(a, d, s, alpha, gloss, ior);
 }
 
-Material Copper()
+Material BurntCopper()
 {
-    vec3 a = vec3(0.0);
-    vec3 d = vec3(0.87111, 0.38391, 0.28864);
+    vec3 a = vec3(0.05267, 0.007788, 0.00075625);
+    vec3 d = vec3(0.30338, 0.044859, 0.004356);
+    vec3 s = vec3(0.33709, 0.049844, 0.004831);
+    float alpha = 51.1;
+    float gloss = 1.5;
+    float ior = 1.22;
+    return Material(a, d, s, alpha, gloss, ior);
+}
+
+Material ShinyPenny()
+{
+    vec3 a = vec3(0.05267, 0.007788, 0.00075625);
+    vec3 d = vec3(0.30338, 0.044859, 0.004356);
     vec3 s = vec3(1.0);
-    float alpha = 85.0;
+    float alpha = 51.1;
     float gloss = 1.5;
     float ior = 1.22;
     return Material(a, d, s, alpha, gloss, ior);
@@ -104,46 +102,66 @@ Material Checkerboard(vec3 p)
 }
 
 //----------Signed Distance Fields----------//
-Surface SDFfloor(vec3 p, vec3 color, Material mat) // Waves
+float rand(float fl)
 {
-    float d = p.y - (0.5 * sin(p.z + iTime) - 0.5 * sin(p.x + iTime)) / 2.0 + 1.0;
-    return Surface(d, color, mat);
+    return fract(sin(fl));
 }
 
-Surface SDFplane(vec3 p, vec3 color, Material mat) // Flat
+float noise(float x)
+{
+    float fl = floor(x);
+    float fc = fract(x);
+    return mix(rand(fl), rand(fl + 1.0), fc);
+}
+
+Surface SDFfloor(vec3 p, Material mat) // Waves
+{
+    float d = p.y;
+    float amplitude = 0.65;
+    float frequency = 0.15;
+    float t = iTime * 0.25;
+    d += sin(p.y * frequency * 2.1 + t) - sin(p.z * frequency * 2.1 + t);
+    d += sin(p.z * frequency * 1.72 + t * 0.437) - sin(p.x * frequency * 1.72 + t * 0.193);
+    d += sin(p.x * frequency * 2.221 + t * 0.193) - sin(p.z * frequency * 2.221 + t * 0.437);
+    d += sin(p.x * frequency * 3.1122 + t * 0.269) - sin(p.z * frequency * 3.1122 + t * 0.269);
+    d *= amplitude;
+    d += 1.0;
+
+    const int octaves = 8;
+    float lacunarity = 2.0;
+    float gain = 0.65;
+
+    //Loop of octaves
+    for (int i = 0; i < octaves; i++)
+    {
+        d += amplitude * noise(sin(frequency * p.y));
+        frequency *= lacunarity;
+        amplitude *= gain;
+    }
+
+    d -= (0.25 * (cos(p.z + t + noise(p.y))) + 0.25 * cos(p.x + t + noise(p.y))) / 2.0 - 2.0;
+
+    return Surface(d, mat);
+}
+
+Surface SDFplane(vec3 p, Material mat) // Flat
 {
     float d = p.y + 1.0;
-    return Surface(d, color, mat);
+    return Surface(d, mat);
 }
 
-Surface SDFsphere(vec3 p, float radius, vec3 move, vec3 color, Material mat)
+Surface SDFsphere(vec3 p, float radius, vec3 move, Material mat)
 {
     float d = length(p - move) - radius;
-    return Surface(d, color, mat);
+    float amplitude = 0.65;
+    float frequency = 0.15;
+    const int octaves = 6;
+    float lacunarity = 2.0;
+    float gain = 0.65;
+
+    return Surface(d, mat);
 }
 
-Surface SDFbox(vec3 p, vec3 rect, vec3 move, vec3 color, Material mat)
-{
-    float c = cos(iTime * 0.5);
-    float s = sin(iTime * 0.5);
-
-    mat3 rotZ = mat3(c, -s, 0.0,
-                     s, c, 0.0,
-                     0.0, 0.0, 1.0);
-
-    mat3 rotY = mat3(c, 0.0, s,
-                     0.0, 1.0, 0.0,
-                    -s, 0.0, c);
-
-    mat3 rotX = mat3(1.0, 0.0, 0.0,
-                     0.0, c, -s,
-                     0.0, s, c);
-
-    p = p - move;
-    p *= rotX * rotY * rotZ;
-    float d = length(max(abs(p) - rect, 0.0)) - 0.02;
-    return Surface(d, color, mat);
-}
 
 Surface minObjectDistance(Surface obj1, Surface obj2)
 {
@@ -156,28 +174,12 @@ Surface map(vec3 p)
 {
     Material Colorb;
     Surface d;
-    Surface sphere = SDFsphere(p, 1.5, vec3(0.0, 0.5, -5.0), vec3(0.0), Obsidian());
-    Surface box = SDFbox(p, vec3(0.5), vec3(2.5, 2.0, -4.0), vec3(0.0), Obsidian());
-    Surface balls = minObjectDistance(sphere, box);
+    Surface sphere = SDFsphere(p, 2.0, vec3(0.0, 2.0, -15.0), BurntCopper());
+    //Surface balls = minObjectDistance(sphere, box);
 
-    for (int i = 0; i < 1; i++)
-    {
-        if (i % 3 == 0) Colorb = Copper();
-        if (i % 3 == 1) Colorb = Gold();
-        if (i % 3 == 2) Colorb = Obsidian();
-        balls = minObjectDistance(balls, SDFsphere(p, 1.5, vec3(2.5 + 2.5 * float(i), 0.5, -7.0 - 2.5 * float(i)), vec3(0.0), Colorb));
-    }
-
-    for (int i = 0; i < 1; i++)
-    {
-        if (i % 3 == 0) Colorb = Gold();
-        if (i % 3 == 1) Colorb = Copper();
-        if (i % 3 == 2) Colorb = Obsidian();
-        balls = minObjectDistance(balls, SDFsphere(p, 1.5, vec3(-2.5 - 2.5 * float(i), 0.5, -7.0 - 2.5 * float(i)), vec3(0.0), Colorb));
-    }
-
-    return minObjectDistance(balls, SDFplane(p, vec3(0.0), Checkerboard(p)));
+    return minObjectDistance(sphere, SDFfloor(p, BurntCopper())); //Checkerboard(p) 
 }
+
 //----------Normals----------//
 vec3 calcNormal(vec3 p)
 {
@@ -241,46 +243,46 @@ float AmbientOcclusion(vec3 fragPos, vec3 normal)
 
 //----------BRDF (Blinn Phong)----------//
 vec3 BlinnPhong(vec3 normal, vec3 lightPos, vec3 fragPos, Material mat)
-{
+{ 
     //ambient
     float occ = AmbientOcclusion(fragPos, normal);
     vec3 ambient = mat.ambientCol;
     //return vec3(0.9) * occ; //Occlusion test
-
+    
     //diffuse
     vec3 lightDir = normalize(lightPos - fragPos);
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 diffuse = diff * mat.diffCol;
-
+    
     //specular with normalization
     vec3 reflectDir = reflect(-lightDir, normal);
     vec3 viewDir = normalize(camera - fragPos);
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = max(dot(normal, halfwayDir), 0.0);
-    spec = pow(spec, mat.alpha) * ((mat.alpha + 2.0) / (4.0 * PI * (2.0 - exp(-mat.alpha / 2.0))));
+    spec = pow(spec, mat.alpha) * ((mat.alpha + 2.0) / (4.0 * PI * (2.0 - exp(-mat.alpha/2.0))));
     vec3 specular = spec * mat.specCol;
-
+    
     //phong
-    return (ambient * occ + diffuse + specular * occ);
+    return (ambient*occ + diffuse + specular*occ);
 }
 
 vec3 reflectBP(vec3 normal, vec3 lightPos, vec3 fragPos, Material mat, vec3 reflectDir)
 {
     //ambient
     vec3 ambient = mat.ambientCol;
-
+    
     //diffuse
     vec3 lightDir = normalize(lightPos - fragPos);
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 diffuse = diff * mat.diffCol;
-
+    
     //specular with normalization
     vec3 viewDir = normalize(camera - fragPos);
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = max(dot(reflectDir, halfwayDir), 0.0);
-    spec = pow(spec, mat.alpha) * ((mat.alpha + 2.0) / (4.0 * PI * (2.0 - exp(-mat.alpha / 2.0))));
+    spec = pow(spec, mat.alpha) * ((mat.alpha + 2.0) / (4.0 * PI * (2.0 - exp(-mat.alpha/2.0))));
     vec3 specular = spec * mat.specCol;
-
+    
     return ambient + diffuse + specular;
 }
 
@@ -314,8 +316,8 @@ void main()
     {
         vec2 uv = ((fragCoord + RGSS(i)) - 0.5 * iResolution.xy) / iResolution.y; //aspect ratio       
         vec3 rd = normalize(vec3(uv, -1.0)); //Turns the uv into a 3D vector by making it point outwards
-        background = vec3(0.65, 0.85, 1.0) + uv.y * 0.75;
-        background = mix(vec3(1.0, 0.75, 0.5), vec3(0.65, 0.85, 1.0), uv.y + 0.55);
+        background = mix(vec3(0.9, 0.65, 0.55), vec3(0.65, 0.85, 1.0), uv.y + 0.25);
+
         //background = vec3(0.0);
 
         d = rayMarch(camera, rd);
@@ -336,10 +338,20 @@ void main()
             {
                 Surface bounce = rayMarch(ref, reflectDir);
                 if (bounce.sd <= farPlane)
-                    shine = Material(shine.ambientCol + bounce.mat.ambientCol * fresnel, shine.diffCol + bounce.mat.diffCol * fresnel, shine.specCol + bounce.mat.specCol * fresnel, shine.alpha, shine.gloss, shine.ior);
+                    shine = Material(shine.ambientCol + bounce.mat.ambientCol * fresnel, 
+                            shine.diffCol + bounce.mat.diffCol * fresnel, 
+                            shine.specCol + bounce.mat.specCol * fresnel, 
+                            shine.alpha, 
+                            shine.gloss, 
+                            shine.ior);
 
                 else
-                    shine = Material(shine.ambientCol + background * fresnel, shine.diffCol + background * fresnel, shine.specCol + background * fresnel, shine.alpha, shine.gloss, shine.ior);                   
+                    shine = Material(shine.ambientCol + background * fresnel, 
+                            shine.diffCol + background * fresnel, 
+                            shine.specCol + background * fresnel, 
+                            shine.alpha, 
+                            shine.gloss, 
+                            shine.ior);                   
             
             }
             
@@ -352,6 +364,6 @@ void main()
     }
 
     col /= float(i);
-    col = mix(col, background, 1.0 - exp(-0.0001 * d.sd * d.sd * d.sd)); //fog
+    col = mix(col, background, 1.0 - exp(-0.00001 * d.sd * d.sd * d.sd)); //fog
     FragColor.rgb = pow(col.rgb, vec3(1.0 / GAMMA));
 } 
